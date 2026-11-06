@@ -12,11 +12,15 @@ import type {
 
 type LineListener = (line: string) => void;
 
+type EngineState = "stopped" | "starting" | "running" | "stopping" | "failed";
 export class StockfishEngine {
   private process?: ChildProcessWithoutNullStreams;
   private output?: Interface;
   private listeners = new Set<LineListener>();
   private isAnalyzing = false;
+  private state: EngineState = "stopped";
+  private processError?: Error;
+  private failureListeners = new Set<(error: Error) => void>();
 
   private readonly options: StockfishOptions;
 
@@ -24,67 +28,91 @@ export class StockfishEngine {
     this.options = options;
   }
 
-  async start(): Promise<void> {
-    if (this.process && !this.process.killed) {
-      return;
+  
+    async start(): Promise<void> {
+    if (this.state === "running") {
+        return;
     }
 
+    if (this.state !== "stopped" && this.state !== "failed") {
+        throw new Error(`Cannot start Stockfish while ${this.state}.`);
+    }
+
+    this.state = "starting";
+    this.processError = undefined;
+
     const executablePath =
-      this.options.executablePath ??
-      process.env.STOCKFISH_PATH ??
-      "stockfish";
+        this.options.executablePath ??
+        process.env.STOCKFISH_PATH ??
+        "stockfish";
 
     const engine = spawn(executablePath, [], {
-      stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"],
     });
 
     this.process = engine;
 
+    engine.on("error", (error) => {
+        this.handleProcessFailure(error);
+    });
+
     this.output = createInterface({
-      input: engine.stdout,
+        input: engine.stdout,
     });
 
     this.output.on("line", (line) => {
-      for (const listener of this.listeners) {
+        for (const listener of this.listeners) {
         listener(line);
-      }
+        }
     });
 
     engine.stderr.on("data", (data: Buffer) => {
-      // Stockfish diagnostic output is separate from UCI responses.
-      // Keep it available for debugging when necessary.
-      if (process.env.NODE_ENV === "development") {
+        if (process.env.NODE_ENV === "development") {
         process.stderr.write(data);
-      }
+        }
     });
 
-    engine.on("exit", () => {
-      this.process = undefined;
-      this.output?.close();
-      this.output = undefined;
+    engine.on("exit", (code, signal) => {
+        this.process = undefined;
+        this.output?.close();
+        this.output = undefined;
+
+        if (this.state !== "stopping") {
+            this.state = "stopped";
+        } else {
+            this.handleProcessFailure(
+                new Error(
+                    `Stockfish exited unexpectedly. Code: ${code}, Signal: ${signal}`,
+                )
+            );
+        }
     });
 
     try {
-      await this.sendAndWait("uci", "uciok");
+        await this.sendAndWait("uci", "uciok");
 
-      this.sendCommand(
+        this.sendCommand(
         `setoption name Threads value ${this.options.threads ?? 1}`,
-      );
+        );
 
-      this.sendCommand(
+        this.sendCommand(
         `setoption name Hash value ${this.options.hash ?? 128}`,
-      );
+        );
 
-      this.sendCommand(
+        this.sendCommand(
         `setoption name MultiPV value ${this.options.multiPV ?? 1}`,
-      );
+        );
 
-      await this.sendAndWait("isready", "readyok");
+        await this.sendAndWait("isready", "readyok");
+
+        this.state = "running";
     } catch (error) {
-      this.stop();
-      throw error;
+        this.state = "failed";
+        await this.stop();
+        throw error;
     }
-  }
+    }
+
 
   async analysePosition(
     fen: string,
@@ -156,25 +184,68 @@ export class StockfishEngine {
     const engine = this.process;
 
     if (!engine) {
-      return;
+        if (this.state !== "failed") {
+            this.state = "stopped";
+        }
+        return;
     }
+
+    this.state = "stopping";
+
+    const exitPromise = new Promise<void>((resolve) => {
+        const handleExit = () => {
+            clearTimeout(forceKillTimeout);
+            resolve();
+        };
+
+        engine.once("exit", handleExit);
+
+        if (engine.exitCode !== null || engine.signalCode !== null) {
+            handleExit();
+            return;
+        }
+
+        const forceKillTimeout = setTimeout(() => {
+            if (engine.exitCode === null && engine.signalCode === null) {
+                engine.kill("SIGKILL");
+            }
+        }, 5_000);
+
+        try {
+            if (engine.stdin.writable) {
+                engine.stdin.write("quit\n");
+            } else {
+                engine.kill();
+            }
+        } catch {
+            engine.kill();
+        }
+    });
+
+    await exitPromise;
 
     this.process = undefined;
-
-    try {
-      if (engine.stdin.writable) {
-        engine.stdin.write("quit\n");
-      }
-    } catch {
-      // The process may already be shutting down.
-    }
-
     this.output?.close();
     this.output = undefined;
 
-    if (!engine.killed) {
-      engine.kill();
+    if (this.state === "stopping") {
+        this.state = "stopped";
     }
+  }
+
+  private handleProcessFailure(error: Error): void{
+    if (this.processError) {
+      return;
+    }
+
+    this.processError = error;
+    this.state = "failed";
+
+    for (const listener of this.failureListeners) {
+      listener(error);
+    }
+
+    this.failureListeners.clear();
   }
 
   private sendCommand(command: string): void {
@@ -199,31 +270,44 @@ export class StockfishEngine {
     await response;
   }
 
-  private waitForLine(
-    predicate: (line: string) => boolean,
-    timeoutMs: number,
-  ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const listener: LineListener = (line) => {
-        if (predicate(line)) {
-          cleanup();
-          resolve(line);
-        }
-      };
+    private waitForLine(
+        predicate: (line: string) => boolean,
+        timeoutMs: number,
+        ): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const cleanup = () => {
+            clearTimeout(timeout);
+            this.listeners.delete(lineListener);
+            this.failureListeners.delete(failureListener);
+            };
 
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(
-          new Error("Timed out waiting for a Stockfish response."),
-        );
-      }, timeoutMs);
+            const lineListener: LineListener = (line) => {
+            if (predicate(line)) {
+                cleanup();
+                resolve(line);
+            }
+            };
 
-      const cleanup = () => {
-        clearTimeout(timeout);
-        this.listeners.delete(listener);
-      };
+            const failureListener = (error: Error) => {
+            cleanup();
+            reject(error);
+            };
 
-      this.listeners.add(listener);
-    });
-  }
+            const timeout = setTimeout(() => {
+            cleanup();
+            reject(
+                new Error("Timed out waiting for a Stockfish response."),
+            );
+            }, timeoutMs);
+
+            if (this.processError) {
+            cleanup();
+            reject(this.processError);
+            return;
+            }
+
+            this.listeners.add(lineListener);
+            this.failureListeners.add(failureListener);
+        });
+    }
 }
