@@ -6,3 +6,75 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum AccountProvider {
+  LICHESS
+  CHESS_COM
+}
+
+model User {
+  id              String            @id @default(cuid())
+  email           String?           @unique
+  passwordHash    String?
+  displayName     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  accounts        ConnectedAccount[]
+  games           Game[]
+  settings        UserSettings?
+  oauthStates     OAuthState[]
+}
+
+model ConnectedAccount {
+  id                String          @id @default(cuid())
+  provider          AccountProvider
+  providerUserId    String
+  username          String
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model Game {
+  id              String          @id @default(cuid())
+  provider        AccountProvider
+  providerGameId  String
+  white           String
+  black           String
+  result          String
+  playedAt        DateTime?
+  gameUrl         String?
+  pgn             String          @db.Text
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
+
+  @@unique([userId, provider, providerGameId])
+  @@index([userId, playedAt])
+}
+
+model UserSettings {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme           String   @default("system")
+  accent          String   @default("indigo")
+  gamesPerSync    Int      @default(20)
+  ratedGamesOnly  Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+}
+
+model OAuthState {
+  state         String    @id
+  codeVerifier  String
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+
+  @@index([expiresAt])
+}

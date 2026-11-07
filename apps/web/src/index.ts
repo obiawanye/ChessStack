@@ -1,5 +1,6 @@
 import { createElement } from 'react';
-import ReactiveThemeSwitcher from './components/themes.js';
+import NavMenu from './components/nav-menu.js';
+import PgnInput from './components/pgn-input.js';
 
 export default function Web() {
   return createElement(
@@ -14,7 +15,7 @@ export default function Web() {
         createElement('span', { className: 'brand-mark', 'aria-hidden': true }, '♞'),
         'ChessStack',
       ),
-      createElement(ReactiveThemeSwitcher, { showAccents: true }),
+      createElement(NavMenu),
     ),
     createElement(
       'section',
@@ -28,17 +29,8 @@ export default function Web() {
       ),
       createElement(
         'aside',
-        { className: 'appearance-card', 'aria-labelledby': 'appearance-title' },
-        createElement(
-          'div',
-          null,
-          createElement('h2', { id: 'appearance-title' }, 'Make it yours'),
-          createElement(
-            'p',
-            null,
-            'Choose a theme and accent color. Your preference stays on this device.',
-          ),
-        ),
+        { className: 'pgn-card', 'aria-label': 'PGN import' },
+        createElement(PgnInput),
       ),
     ),
   );
