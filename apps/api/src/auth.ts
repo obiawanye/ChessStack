@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { RequestHandler, Response } from 'express';
-import { SignJWT, jwtVerify } from 'jose';
 
 const sessionCookie = 'chessstack_session';
 const sessionDurationSeconds = 60 * 60 * 24 * 7;
@@ -32,6 +31,7 @@ function cookieOptions() {
 }
 
 export async function setSessionCookie(userId: string, response: Response) {
+  const { SignJWT } = await import('jose');
   const token = await new SignJWT({})
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
@@ -58,8 +58,10 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
     return;
   }
 
+  const secret = jwtSecret();
+  const { jwtVerify } = await import('jose');
   try {
-    const { payload } = await jwtVerify(token, jwtSecret());
+    const { payload } = await jwtVerify(token, secret);
     if (!payload.sub) {
       response.status(401).json({ error: 'Your session is invalid. Sign in again.' });
       return;
@@ -68,11 +70,20 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
     response.locals.userId = payload.sub;
     next();
   } catch (error) {
-    if (error instanceof Error && error.message.includes('JWT_ACCESS_SECRET')) {
-      next(error);
+    if (
+      error instanceof Error &&
+      [
+        'JWTClaimValidationFailed',
+        'JWTExpired',
+        'JWTInvalid',
+        'JWSInvalid',
+        'JWSSignatureVerificationFailed',
+      ].includes(error.name)
+    ) {
+      response.status(401).json({ error: 'Your session has expired. Sign in again.' });
       return;
     }
-    response.status(401).json({ error: 'Your session has expired. Sign in again.' });
+    next(error);
   }
 };
 

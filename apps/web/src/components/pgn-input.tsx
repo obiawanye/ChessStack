@@ -1,6 +1,11 @@
+import { Chess } from 'chess.js';
 import { useEffect, useRef, useState } from 'react';
 
-export default function PgnInput() {
+interface PgnInputProps {
+  onAccept?: (pgn: string) => void;
+}
+
+export default function PgnInput({ onAccept }: PgnInputProps) {
   const [pgn, setPgn] = useState('');
   const [acceptedPgn, setAcceptedPgn] = useState('');
   const [status, setStatus] = useState('');
@@ -37,10 +42,23 @@ export default function PgnInput() {
       return;
     }
 
-    setAcceptedPgn(pgn.trim());
-    setPgn(pgn.trim());
+    const trimmedPgn = pgn.trim();
+    try {
+      new Chess().loadPgn(trimmedPgn);
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? `This PGN could not be read: ${error.message}`
+          : 'This PGN could not be read.',
+      );
+      return;
+    }
+
+    setAcceptedPgn(trimmedPgn);
+    setPgn(trimmedPgn);
     setStatus('');
     setIsOpen(false);
+    onAccept?.(trimmedPgn);
   };
 
   const pasteFromClipboard = async () => {
@@ -95,7 +113,7 @@ export default function PgnInput() {
           <div className="pgn-dialog-heading">
             <div>
               <h2 id="pgn-title">Review PGN</h2>
-              <p>Paste or edit a game, then choose whether to accept or deny it.</p>
+              <p>Paste or edit a game, then choose whether to accept or cancel.</p>
             </div>
             <span className="pgn-review-badge">Review</span>
           </div>
@@ -129,7 +147,7 @@ export default function PgnInput() {
                 {isPasting ? 'Pasting…' : 'Paste'}
               </button>
               <button type="button" className="pgn-button pgn-deny-button" onClick={denyPgn}>
-                Deny
+                Cancel
               </button>
               <button
                 type="button"

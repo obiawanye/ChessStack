@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import argon2 from 'argon2';
 import { z } from 'zod';
-import { AccountProvider } from '../../generated/prisma/client';
-import { clearSessionCookie, createOAuthCredentials, optionalAuth, requireAuth, setSessionCookie } from '../auth';
+import { AccountProvider } from '../generated/prisma/client';
+import {
+  clearSessionCookie,
+  createOAuthCredentials,
+  optionalAuth,
+  requireAuth,
+  setSessionCookie,
+} from '../auth';
 import { db } from '../db';
 
 const router = Router();
@@ -51,7 +57,9 @@ router.post('/register', async (request, response) => {
     .safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ error: 'Enter a valid email and a password of at least 10 characters.' });
+    response
+      .status(400)
+      .json({ error: 'Enter a valid email and a password of at least 10 characters.' });
     return;
   }
 
@@ -61,15 +69,24 @@ router.post('/register', async (request, response) => {
     return;
   }
 
-  const user = await db.user.create({
-    data: {
-      email,
-      displayName: parsed.data.displayName,
-      passwordHash: await argon2.hash(parsed.data.password),
-      settings: { create: {} },
-    },
-    include: { accounts: true, settings: true },
-  });
+  let user;
+  try {
+    user = await db.user.create({
+      data: {
+        email,
+        displayName: parsed.data.displayName,
+        passwordHash: await argon2.hash(parsed.data.password),
+        settings: { create: {} },
+      },
+      include: { accounts: true, settings: true },
+    });
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      response.status(409).json({ error: 'An account with that email already exists.' });
+      return;
+    }
+    throw error;
+  }
   await setSessionCookie(user.id, response);
   response.status(201).json({ user: publicUser(user) });
 });
@@ -121,6 +138,7 @@ router.get('/lichess', optionalAuth, async (_request, response) => {
   }
 
   const { verifier, challenge, state } = createOAuthCredentials();
+  await db.oAuthState.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   await db.oAuthState.create({
     data: {
       state,

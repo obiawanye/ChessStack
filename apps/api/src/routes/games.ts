@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { AccountProvider } from '../../generated/prisma/client';
+import { AccountProvider } from '../generated/prisma/client';
 import { requireAuth } from '../auth';
 import { db } from '../db';
 
@@ -29,20 +29,29 @@ function parseChessComGame(value: unknown): ImportedGame | undefined {
   if (typeof white?.username !== 'string' || typeof black?.username !== 'string') return undefined;
 
   const endTime = typeof game.end_time === 'number' ? game.end_time : undefined;
+  const whiteResult = typeof white.result === 'string' ? white.result : '';
+  const blackResult = typeof black.result === 'string' ? black.result : '';
+  const drawResults = new Set([
+    'agreed',
+    'repetition',
+    'stalemate',
+    'insufficient',
+    '50move',
+    'timevsinsufficient',
+  ]);
   return {
     provider: AccountProvider.CHESS_COM,
     providerGameId: game.url,
     white: white.username,
     black: black.username,
-    result: typeof white.result === 'string' && typeof black.result === 'string'
-      ? white.result === 'win'
+    result:
+      whiteResult === 'win'
         ? '1-0'
-        : black.result === 'win'
+        : blackResult === 'win'
           ? '0-1'
-          : white.result === 'agreed' || black.result === 'agreed' || white.result === 'repetition' || black.result === 'repetition'
+          : drawResults.has(whiteResult) || drawResults.has(blackResult)
             ? '1/2-1/2'
-            : '*'
-      : '*',
+            : '*',
     playedAt: endTime ? new Date(endTime * 1000) : null,
     gameUrl: game.url,
     pgn: game.pgn,
@@ -61,7 +70,14 @@ function parseLichessGame(value: unknown): ImportedGame | undefined {
   if (typeof whiteUser?.name !== 'string' || typeof blackUser?.name !== 'string') return undefined;
 
   const winner = game.winner;
-  const result = winner === 'white' ? '1-0' : winner === 'black' ? '0-1' : game.status === 'draw' ? '1/2-1/2' : '*';
+  const result =
+    winner === 'white'
+      ? '1-0'
+      : winner === 'black'
+        ? '0-1'
+        : game.status === 'draw'
+          ? '1/2-1/2'
+          : '*';
   return {
     provider: AccountProvider.LICHESS,
     providerGameId: game.id,
@@ -92,13 +108,18 @@ async function fetchChessComGames(username: string, limit: number, ratedOnly: bo
     throw new Error(`Chess.com archive lookup failed with status ${archiveResponse.status}.`);
   }
   const archiveData: unknown = await archiveResponse.json();
-  const archiveList = archiveData as { archives?: unknown };
-  if (!Array.isArray(archiveList.archives) || archiveList.archives.some((item) => typeof item !== 'string')) {
+  if (
+    !archiveData ||
+    typeof archiveData !== 'object' ||
+    !('archives' in archiveData) ||
+    !Array.isArray(archiveData.archives) ||
+    archiveData.archives.some((item) => typeof item !== 'string')
+  ) {
     throw new Error('Chess.com returned an invalid game archive list.');
   }
 
   const result: ImportedGame[] = [];
-  for (const archiveUrl of [...archiveList.archives].reverse().slice(0, 12)) {
+  for (const archiveUrl of [...archiveData.archives].reverse().slice(0, 12)) {
     const url = new URL(archiveUrl);
     if (url.protocol !== 'https:' || url.hostname !== 'api.chess.com') {
       throw new Error('Chess.com returned an unexpected game archive URL.');
@@ -112,13 +133,18 @@ async function fetchChessComGames(username: string, limit: number, ratedOnly: bo
       throw new Error(`Chess.com game archive lookup failed with status ${gamesResponse.status}.`);
     }
     const archiveGames: unknown = await gamesResponse.json();
-    const games = archiveGames as { games?: unknown };
-    if (!Array.isArray(games.games)) {
+    if (
+      !archiveGames ||
+      typeof archiveGames !== 'object' ||
+      !('games' in archiveGames) ||
+      !Array.isArray(archiveGames.games)
+    ) {
       throw new Error('Chess.com returned an invalid game archive.');
     }
 
-    for (const rawGame of [...games.games].reverse()) {
-      if (ratedOnly && (rawGame as Record<string, unknown>).rated !== true) continue;
+    for (const rawGame of [...archiveGames.games].reverse()) {
+      if (!rawGame || typeof rawGame !== 'object') continue;
+      if (ratedOnly && (!('rated' in rawGame) || rawGame.rated !== true)) continue;
       const game = parseChessComGame(rawGame);
       if (game) result.push(game);
       if (result.length >= limit) break;
@@ -172,7 +198,9 @@ router.post('/sync', requireAuth, async (_request, response) => {
     db.userSettings.findUnique({ where: { userId } }),
   ]);
   if (!accounts.length) {
-    response.status(400).json({ error: 'Connect a Lichess or Chess.com account before importing games.' });
+    response
+      .status(400)
+      .json({ error: 'Connect a Lichess or Chess.com account before importing games.' });
     return;
   }
 
