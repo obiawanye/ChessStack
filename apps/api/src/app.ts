@@ -2,10 +2,15 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
+<<<<<<< HEAD
 import accountRoutes from './routes/accounts';
 import authRoutes from './routes/auth';
 import gameRoutes from './routes/games';
 import settingsRoutes from './routes/settings';
+=======
+import analysisRoutes from "./routes/analysis.routes";
+import { errorMiddleware } from "./middleware/error.middleware";
+>>>>>>> origin/main
 
 const app = express();
 
@@ -41,4 +46,11 @@ app.get('/api/v1/health', (_req, res) => {
   });
 });
 
+<<<<<<< HEAD
 export default app;
+=======
+app.use("/api/v1/analysis", analysisRoutes)
+app.use(errorMiddleware);
+
+export default app;
+>>>>>>> origin/main

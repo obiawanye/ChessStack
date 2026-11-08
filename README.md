@@ -96,5 +96,18 @@ TypeScript chess rules and PGN library (BSD-2-Clause). The board UI is rendered 
 - Android
 
 ## License
+Copyright (c) 2026 Obichukwu Awanye and Mustapha Abba. All rights reserved.
 
+<<<<<<< HEAD
 To be determined.
+=======
+This source code and all related files are confidential and proprietary. 
+
+Unauthorized copying, modification, distribution, or commercial exploitation of this software, via any medium, is strictly prohibited. 
+
+Use, modification, or monetization of this code is permitted only under explicit, written authorization from the copyright holders.
+
+## Developers
+ - Obichukwu Awanye
+ - Mustapha Abba 
+>>>>>>> origin/main
