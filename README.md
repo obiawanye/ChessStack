@@ -14,16 +14,16 @@ Users can upload completed chess games in PGN format from platforms such as Ches
 
 ## Technology Stack
 
-| Component | Technology |
-|---|---|
-| Web | React, TypeScript, Tailwind CSS |
-| Mobile | React Native, Expo, TypeScript |
-| Backend | Node.js, Express.js, TypeScript |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Chess Engine | Stockfish |
-| Chess Logic | chess.js |
-| Package Manager | pnpm |
+| Component       | Technology                      |
+| --------------- | ------------------------------- |
+| Web             | React, TypeScript, Tailwind CSS |
+| Mobile          | React Native, Expo, TypeScript  |
+| Backend         | Node.js, Express.js, TypeScript |
+| Database        | PostgreSQL                      |
+| ORM             | Prisma                          |
+| Chess Engine    | Stockfish                       |
+| Chess Logic     | chess.js                        |
+| Package Manager | pnpm                            |
 
 ## Repository Structure
 
@@ -56,9 +56,28 @@ cd ChessStack
 pnpm install
 ```
 
+### Accounts and game imports
+
+The API stores users, linked providers, game PGNs, preferences, and short-lived Lichess OAuth
+states in PostgreSQL. Start the local database with `docker compose up -d postgres`, copy
+`apps/api/.env.example` to `apps/api/.env`, set a unique `JWT_ACCESS_SECRET`, and register a
+Lichess OAuth application whose callback URL matches `LICHESS_REDIRECT_URI`. Then run:
+
+```bash
+npm run prisma:generate --workspace=@chessstack/api
+npm run prisma:migrate --workspace=@chessstack/api
+npm run dev --workspace=@chessstack/api
+npm run dev --workspace=@chessstack/web
+```
+
+Lichess supports OAuth sign-in and account linking. Chess.com does not offer a public OAuth
+sign-in flow, so ChessStack links its public profile by verifying the supplied username with
+the Chess.com public API. Imported games and account settings are saved per ChessStack user.
+
 ## Core Features
 
 - PGN file uploads
+- PGN game viewer with an interactive board, move list, and playback controls
 - Automated Stockfish analysis
 - Move classification
 - Best move recommendations
@@ -66,6 +85,9 @@ pnpm install
 - Game evaluation graphs
 - Game performance reports
 - Saved game analysis
+
+The web PGN viewer uses [`chess.js`](https://github.com/jhlywa/chess.js), an open-source
+TypeScript chess rules and PGN library (BSD-2-Clause). The board UI is rendered by ChessStack.
 
 ## Platforms Supported
 
@@ -76,6 +98,9 @@ pnpm install
 ## License
 Copyright (c) 2026 Obichukwu Awanye and Mustapha Abba. All rights reserved.
 
+<<<<<<< HEAD
+To be determined.
+=======
 This source code and all related files are confidential and proprietary. 
 
 Unauthorized copying, modification, distribution, or commercial exploitation of this software, via any medium, is strictly prohibited. 
@@ -85,3 +110,4 @@ Use, modification, or monetization of this code is permitted only under explicit
 ## Developers
  - Obichukwu Awanye
  - Mustapha Abba 
+>>>>>>> origin/main
