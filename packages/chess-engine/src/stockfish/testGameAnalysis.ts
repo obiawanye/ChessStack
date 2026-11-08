@@ -20,6 +20,7 @@ async function main() {
     console.log("\nGame analysis completed!");
 
     console.log("Headers:", result.headers);
+    console.log("Game result:", result.result);
     console.log("Depth:", result.depth);
     console.log("Initial evaluation:", result.initialEvaluation);
     console.log("Final evaluation:", result.finalEvaluation);
@@ -31,15 +32,19 @@ async function main() {
       result.moves.map((move) => ({
         ply: move.ply,
         color: move.color === "w" ? "White" : "Black",
-        move: move.san,
+        played: move.san,
+        recommended: move.bestMove,
         before: move.beforeEvaluation.value,
         after: move.afterEvaluation.value,
         centipawnLoss: move.centipawnLoss,
-        classification: move.classification
+        classification: move.classification,
+        principalVariation: move.principalVariation.join(" "),
       })),
     );
 
     console.log("\nPlayer accuracy:");
+    console.log("\nGame status:");
+    console.log(result.status);
 
     console.log("White:", result.accuracy.white);
     console.log("Black:", result.accuracy.black);

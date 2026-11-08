@@ -1,29 +1,28 @@
-
-import assert from "node:assert/strict";
+import { describe, expect, it } from "vitest";
 import { normalizeEvaluation } from "../analyseGame";
 
-const whiteToMove =
-  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+describe("normalizeEvaluation", () => {
+  const whiteToMove =
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-const blackToMove =
-  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+  const blackToMove =
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
 
-// White-to-move evaluations retain their sign.
-assert.deepEqual(
-  normalizeEvaluation({ type: "cp", value: 35 }, whiteToMove),
-  { type: "cp", value: 35 },
-);
+  it("preserves evaluation signs when White is to move", () => {
+    expect(
+      normalizeEvaluation({ type: "cp", value: 35 }, whiteToMove),
+    ).toEqual({ type: "cp", value: 35 });
+  });
 
-// Black-to-move evaluations have their sign reversed.
-assert.deepEqual(
-  normalizeEvaluation({ type: "cp", value: 35 }, blackToMove),
-  { type: "cp", value: -35 },
-);
+  it("reverses evaluation signs when Black is to move", () => {
+    expect(
+      normalizeEvaluation({ type: "cp", value: 35 }, blackToMove),
+    ).toEqual({ type: "cp", value: -35 });
+  });
 
-// Mate evaluations are normalised in the same way.
-assert.deepEqual(
-  normalizeEvaluation({ type: "mate", value: 3 }, blackToMove),
-  { type: "mate", value: -3 },
-);
-
-console.log("Evaluation normalisation tests passed!");
+  it("normalizes mate evaluations correctly", () => {
+    expect(
+      normalizeEvaluation({ type: "mate", value: 3 }, blackToMove),
+    ).toEqual({ type: "mate", value: -3 });
+  });
+});
