@@ -2,12 +2,15 @@
 import type { EngineEvaluation } from "./stockfish/types";
 
 export type MoveClassification =
+  | "brilliant"
+  | "great"
   | "best"
   | "excellent"
   | "good"
   | "inaccuracy"
   | "mistake"
   | "blunder"
+  | "missed-win"
   | "mate-related";
 
 export interface MoveClassificationResult {

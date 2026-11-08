@@ -1,9 +1,12 @@
+
 import { calculateAccuracy } from "./calculateAccuracy";
 import type { GameAccuracy } from "./calculateAccuracy";
 import { classifyMove } from "./classifyMove";
 import type { MoveClassification } from "./classifyMove";
 import { parsePgn } from "./parsePgn";
+import type { PgnResult } from "./parsePgn";
 import { StockfishEngine } from "./stockfish/StockfishEngine";
+import type { GameStatus } from "./gameStatus";
 
 import type {
   EngineEvaluation,
@@ -28,20 +31,28 @@ export interface AnalysedMove {
   lan: string;
   from: string;
   to: string;
+
+  bestMove: string;
+  bestMoveEvaluation: EngineEvaluation;
   beforeEvaluation: EngineEvaluation;
   afterEvaluation: EngineEvaluation;
+
+  principalVariation: string[];
+
   centipawnLoss: number | null;
   classification: MoveClassification;
 }
 
 export interface GameAnalysis {
   headers: Record<string, string>;
+  result: PgnResult;
   depth: number;
   initialEvaluation: EngineEvaluation;
   finalEvaluation: EngineEvaluation;
   moves: AnalysedMove[];
   totalPositionsAnalysed: number;
   accuracy: GameAccuracy;
+  status: GameStatus;
 }
 
 // ---------------------------------------------
@@ -150,6 +161,7 @@ export async function analyseGame(
     );
 
     let previousEvaluation = initialEvaluation;
+    let previousPositionResult = initialResult;
 
     const analysedMoves: AnalysedMove[] = [];
 
@@ -184,25 +196,38 @@ export async function analyseGame(
         lan: move.lan,
         from: move.from,
         to: move.to,
+
+        bestMove: previousPositionResult.bestMove.move,
+        bestMoveEvaluation: previousEvaluation,
+
         beforeEvaluation: previousEvaluation,
         afterEvaluation,
+
+        principalVariation:
+          previousPositionResult.lines
+            .filter((line) => line.multipv === 1)
+            .at(-1)?.principalVariation ?? [],
+
         centipawnLoss: moveClassification.centipawnLoss,
-        classification: moveClassification.classification
+        classification: moveClassification.classification,
       });
 
       previousEvaluation = afterEvaluation;
+      previousPositionResult = positionResult;
     }
 
     const accuracy = calculateAccuracy(analysedMoves);
 
     return {
       headers: parsedGame.headers,
+      result: parsedGame.result,
       depth,
       initialEvaluation,
       finalEvaluation: previousEvaluation,
       moves: analysedMoves,
       totalPositionsAnalysed: parsedGame.moves.length + 1,
       accuracy,
+      status: parsedGame.status,
     };
   } finally {
     await engine.stop();

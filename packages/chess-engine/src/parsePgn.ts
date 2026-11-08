@@ -1,5 +1,7 @@
 
 import { Chess } from "chess.js";
+import { getGameStatus } from "./gameStatus";
+import type { GameStatus } from "./gameStatus";
 
 export interface ParsedPgnMove {
   ply: number;
@@ -15,11 +17,15 @@ export interface ParsedPgnMove {
   after: string;
 }
 
+export type PgnResult = "1-0" | "0-1" | "1/2-1/2" | "*";
+
 export interface ParsedPgn {
   headers: Record<string, string>;
+  result: PgnResult;
   initialFen: string;
   finalFen: string;
   moves: ParsedPgnMove[];
+  status: GameStatus;
 }
 
 export function parsePgn(pgn: string): ParsedPgn {
@@ -30,6 +36,23 @@ export function parsePgn(pgn: string): ParsedPgn {
   const chess = new Chess();
 
   chess.loadPgn(pgn);
+
+  const headers = chess.getHeaders();
+
+  const validResults: readonly PgnResult[] = [
+    "1-0",
+    "0-1",
+    "1/2-1/2",
+    "*",
+  ];
+
+  const rawResult = headers.Result ?? "*";
+
+  if (!validResults.includes(rawResult as PgnResult)) {
+    throw new Error(`Invalid PGN result: ${rawResult}`);
+  }
+
+  const result = rawResult as PgnResult;
 
   const history = chess.history({ verbose: true });
 
@@ -48,9 +71,11 @@ export function parsePgn(pgn: string): ParsedPgn {
   }));
 
   return {
-    headers: chess.getHeaders(),
+    headers,
+    result,
     initialFen: moves[0]?.before ?? chess.fen(),
     finalFen: chess.fen(),
     moves,
+    status: getGameStatus(chess),
   };
 }

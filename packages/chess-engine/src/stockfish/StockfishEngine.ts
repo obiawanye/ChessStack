@@ -77,7 +77,7 @@ export class StockfishEngine {
         this.output?.close();
         this.output = undefined;
 
-        if (this.state !== "stopping") {
+        if (this.state === "stopping") {
             this.state = "stopped";
         } else {
             this.handleProcessFailure(

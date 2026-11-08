@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
+import analysisRoutes from "./routes/analysis.routes";
+import { errorMiddleware } from "./middleware/error.middleware";
 
 const app = express();
 
@@ -26,5 +28,8 @@ app.get('/api/v1/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+app.use("/api/v1/analysis", analysisRoutes)
+app.use(errorMiddleware);
 
 export default app;
